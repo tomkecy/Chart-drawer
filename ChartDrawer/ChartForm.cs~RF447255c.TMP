@@ -1,5 +1,7 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using ChartDrawer.Abstract;
 using ChartDrawer.Concrete;
@@ -9,13 +11,24 @@ namespace ChartDrawer
     public partial class ChartForm : Form
     {
         #region Private Fields
-        private const int DefaultChartScale = 10;
-        private Image _functionChartImage;
+
+        private PointF[] pointsToDraw;
+        private int numberOfPoints = 400;
+        private double lowerXLimit = -40;
+        private double pointInterval = 0.20f;
+        private double defaultMaximumChartValue = 50;
+        private int defaultChartScale = 10;
+        private Bitmap drawingSurface;
+        private Graphics drawingGraphics;
+
+        private delegate DialogResult IncorrectInput();
         
 
-        private int _chartScale;
-        private readonly IImageSaveHandler _imageSaveHandler;
-        private readonly IChartGenerator _chartGenerator;
+        private int chartScale;
+
+        private readonly IImageSaveHandler _imageSaveHandler = new ImageSaveHandler();
+        private IChartGenerator _chartGenerator = new ChartGenerator();
+
 
         #endregion
 
@@ -23,16 +36,42 @@ namespace ChartDrawer
 
         public ChartForm()
         {
-            _chartScale = DefaultChartScale;
-            _imageSaveHandler = new ImageSaveHandler();
-            _chartGenerator = new ChartGenerator();
 
+            pointsToDraw = new PointF[numberOfPoints];
+            chartScale = defaultChartScale;
             InitializeComponent();
-            this._functionChartImage = _chartGenerator.GetEmptyChart(panelDrawField.Width, panelDrawField.Height, _chartScale);
+            this.drawingSurface = new Bitmap(panelDrawField.Width, panelDrawField.Height);
+            DrawAxes();
         }
 
         #endregion
 
+
+
+        private void buttonDraw_Click(object sender, EventArgs e)
+        {
+            panelDrawField.Refresh();
+
+            switch (listBoxFunctionSelect.SelectedIndex)
+            {
+                case 0:
+                    DrawSinus();
+                    break;
+                case 1:
+                    DrawCosinus();
+                    break;
+                case 2:
+                    DrawLogarithm();
+                    break;
+                case 3:
+                    DrawCubic();
+                    break;
+                case 4:
+                    DrawExponential();
+                    break;
+            }
+
+        }
 
         private void DrawExponential()
         {
@@ -52,8 +91,9 @@ namespace ChartDrawer
             bool horizontalLines = checkedListBoxHelperLines.GetItemChecked(0);
             bool verticalLines = checkedListBoxHelperLines.GetItemChecked(1);
 
-            _functionChartImage = _chartGenerator.GetExponentialFunctionChart(factor, functionBase, panelDrawField.Width,
-                    panelDrawField.Height, _chartScale, horizontalLines, verticalLines);
+            drawingSurface =
+                (Bitmap) _chartGenerator.GetExponentialFunctionChart(factor, functionBase, panelDrawField.Width,
+                    panelDrawField.Height, chartScale, horizontalLines, verticalLines);
             panelDrawField.Invalidate();
 
         }
@@ -77,11 +117,20 @@ namespace ChartDrawer
                 MessageBox.Show("Wprowadzono niepoprawne dane", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
                 return;
             }
-            bool horizontalLines = checkedListBoxHelperLines.GetItemChecked(0);
-            bool verticalLines = checkedListBoxHelperLines.GetItemChecked(1);
-            _functionChartImage = _chartGenerator.GetCubicFunctionChart(a, b, c, d, panelDrawField.Width, panelDrawField.Height,
-                _chartScale, horizontalLines, verticalLines);
-            panelDrawField.Invalidate();
+
+            double x = lowerXLimit;
+
+
+
+            for (int i = 0; i < pointsToDraw.Length; i++)
+            {
+                double res = a * (Math.Pow(x, 3)) + b * (Math.Pow(x, 2)) + c * x + d;
+                pointsToDraw[i] = new PointF((float)x, (float)res);
+                x = x + pointInterval;
+
+            }
+
+            DrawFunction();
         }
 
         private void DrawSinus()
@@ -101,9 +150,23 @@ namespace ChartDrawer
             }
             bool horizontalLines = checkedListBoxHelperLines.GetItemChecked(0);
             bool verticalLines = checkedListBoxHelperLines.GetItemChecked(1);
-            _functionChartImage = _chartGenerator.GetSineFunctionChart(a, b, panelDrawField.Width, panelDrawField.Height,
-                _chartScale, horizontalLines, verticalLines);
-            panelDrawField.Invalidate();
+            drawingSurface = (Bitmap) _chartGenerator.GetSineFunctionChart(a, b, panelDrawField.Width, panelDrawField.Height,
+                chartScale, horizontalLines, verticalLines);
+
+        }
+
+        private void DrawFunction()
+        {
+            this.drawingSurface = new Bitmap(panelDrawField.Width, panelDrawField.Height);
+            DrawHelperLines();
+            DrawAxes();
+
+            this.drawingGraphics = Graphics.FromImage(this.drawingSurface);
+            this.drawingGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+            this.drawingGraphics.TranslateTransform(panelDrawField.Width / 2, panelDrawField.Height / 2);
+            this.drawingGraphics.ScaleTransform(chartScale, -chartScale);
+            this.drawingGraphics.DrawLines(new Pen(Color.Black, 0f), pointsToDraw);
+            this.panelDrawField.Invalidate();
 
         }
 
@@ -123,22 +186,32 @@ namespace ChartDrawer
                 MessageBox.Show("Wprowadzono niepoprawne dane", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
                 return;
             }
-            bool horizontalLines = checkedListBoxHelperLines.GetItemChecked(0);
-            bool verticalLines = checkedListBoxHelperLines.GetItemChecked(1);
-            _functionChartImage = _chartGenerator.GetCosineFunctionChart(a, b, panelDrawField.Width, panelDrawField.Height,
-                _chartScale, horizontalLines, verticalLines);
-            panelDrawField.Invalidate();
+
+            double x = lowerXLimit;
+
+            for (int i = 0; i < pointsToDraw.Length; i++)
+            {
+                double res = b * Math.Cos(x * a);
+
+                pointsToDraw[i] = new PointF((float)x, (float)res);
+                x = x + pointInterval;
+
+
+            }
+
+            DrawFunction();
+
         }
 
         private void DrawLogarithm()
         {
 
-            double functionBase;
-            double factor;
+            double a;
+            double b;
             try
             {
-                functionBase = double.Parse(textBoxInput1.Text);
-                factor = double.Parse(textBoxInput2.Text);
+                a = double.Parse(textBoxInput1.Text);
+                b = double.Parse(textBoxInput2.Text);
             }
             catch (FormatException)
             {
@@ -146,56 +219,110 @@ namespace ChartDrawer
                 return;
             }
 
-            if (functionBase <= 0 || functionBase.Equals(1.0))
+            if (a <= 0 || a.Equals(1.0))
             {
                 MessageBox.Show("Wprowadzono niepoprawne dane", "Błąd", MessageBoxButtons.OK, MessageBoxIcon.Exclamation);
                 return;
             }
-            bool horizontalLines = checkedListBoxHelperLines.GetItemChecked(0);
-            bool verticalLines = checkedListBoxHelperLines.GetItemChecked(1);
-            _functionChartImage = _chartGenerator.GetLogarithmFunctionChart(factor, functionBase, panelDrawField.Width, panelDrawField.Height,
-                _chartScale, horizontalLines, verticalLines);
-            panelDrawField.Invalidate();
-        }
 
+            double x = 0.0000001;
 
-        #region WinformsControls
-        private void buttonDraw_Click(object sender, EventArgs e)
-        {
-            panelDrawField.Refresh();
-            switch (listBoxFunctionSelect.SelectedIndex)
+            for (int i = 0; i < pointsToDraw.Length; i++)
             {
-                case 0:
-                    DrawSinus();
-                    break;
-                case 1:
-                    DrawCosinus();
-                    break;
-                case 2:
-                    DrawLogarithm();
-                    break;
-                case 3:
-                    DrawCubic();
-                    break;
-                case 4:
-                    DrawExponential();
-                    break;
+                double res = b * Math.Log(x, a);
+                pointsToDraw[i] = new PointF((float)x, (float)res);
+                x = x + pointInterval;
+
+
             }
 
+            DrawFunction();
         }
-        private void numericUpDownChartScale_ValueChanged(object sender, EventArgs e)
-        {
-            _chartScale = (int)numericUpDownChartScale.Value;
-        }
+
         private void panelDrawField_Paint(object sender, PaintEventArgs e)
         {
 
-            panelDrawField.BackgroundImage = _functionChartImage;
+            panelDrawField.BackgroundImage = this.drawingSurface;
 
         }
 
+        private void DrawAxes()
+        {
+            int width = panelDrawField.Width / 2;
+            int height = panelDrawField.Height / 2;
 
+
+            this.drawingGraphics = Graphics.FromImage(this.drawingSurface);
+            this.drawingGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+            this.drawingGraphics.TranslateTransform(width, height);
+
+            Pen pen = new Pen(Color.Black, 0.0f);
+            pen.EndCap = LineCap.ArrowAnchor;
+
+            this.drawingGraphics.DrawLine(pen, -width, 0, width, 0);
+            this.drawingGraphics.DrawLine(pen, 0, height, 0, -height);
+
+        }
+
+        #region HelperLines
+
+        
+
+        
+        private void DrawHelperLines()
+        {
+            float width = panelDrawField.Width / 2.0f;
+            float height = panelDrawField.Height / 2.0f;
+
+            this.drawingGraphics = Graphics.FromImage(this.drawingSurface);
+            this.drawingGraphics.SmoothingMode = SmoothingMode.AntiAlias;
+            this.drawingGraphics.TranslateTransform(width, height);
+            this.drawingGraphics.ScaleTransform(chartScale, chartScale);
+
+            Pen pen = new Pen(Color.LightGray, 0.0f);
+
+            if (checkedListBoxHelperLines.GetItemChecked(0))
+            {
+                DrawHelperHorizontalLines(pen, width);
+            }
+            if (checkedListBoxHelperLines.GetItemChecked(1))
+            {
+                DrawHelperVerticalLines(pen, height);
+            }
+
+
+
+        }
+
+        private void DrawHelperHorizontalLines(Pen pen, float width)
+        {
+            for (float i = 0; i < width; i++)
+            {
+                this.drawingGraphics.DrawLine(pen, width, i, -width, i);
+                this.drawingGraphics.DrawLine(pen, width, -i, -width, -i);
+            }
+        }
+
+        private void DrawHelperVerticalLines(Pen pen, float height)
+        {
+            for (float i = 0; i < height; i++)
+            {
+                this.drawingGraphics.DrawLine(pen, i, height, i, -height);
+                this.drawingGraphics.DrawLine(pen, -i, height, -i, -height);
+
+            }
+        }
         #endregion
+
+        private void numericUpDownChartScale_ValueChanged(object sender, EventArgs e)
+        {
+            chartScale = (int)numericUpDownChartScale.Value;
+        }
+
+        private void SaveToFile(Bitmap bitmapToSave)
+        {
+            _imageSaveHandler.SaveToFile(bitmapToSave);
+        }
 
         #region InputVisibilityHandlers
         private void listBoxFunctionSelect_SelectedIndexChanged(object sender, EventArgs e)
@@ -347,7 +474,9 @@ namespace ChartDrawer
 
         private void clearToolStripMenuItem_Click(object sender, EventArgs e)
         {
-            this._functionChartImage = (Bitmap)_chartGenerator.GetEmptyChart(panelDrawField.Width, panelDrawField.Height, _chartScale);
+            drawingSurface = new Bitmap(panelDrawField.Width, panelDrawField.Height);
+            DrawHelperLines();
+            DrawAxes();
             panelDrawField.Invalidate();
         }
 
@@ -366,10 +495,7 @@ namespace ChartDrawer
         {
             Close();
         }
-        private void SaveToFile(Bitmap bitmapToSave)
-        {
-            _imageSaveHandler.SaveToFile(bitmapToSave);
-        }
+
         #endregion
 
     }

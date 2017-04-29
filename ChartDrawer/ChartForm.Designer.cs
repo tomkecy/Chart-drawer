@@ -97,7 +97,6 @@
             this.textBoxInput1.Size = new System.Drawing.Size(82, 20);
             this.textBoxInput1.TabIndex = 5;
             this.textBoxInput1.Visible = false;
-            this.textBoxInput1.TextChanged += new System.EventHandler(this.textBoxInput1_TextChanged);
             // 
             // textBoxInput2
             // 
